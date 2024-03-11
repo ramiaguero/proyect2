@@ -62,6 +62,16 @@ move_application_code() {
 # Function to adjust PHP configuration
 adjust_php_configuration() {
     echo "Adjusting PHP configuration..."
+
+    # Check if dir.conf is properly enabled
+    if [ ! -e /etc/apache2/mods-enabled/dir.conf ]; then
+        echo "Enabling dir.conf..."
+        sudo ln -s /etc/apache2/mods-available/dir.conf /etc/apache2/mods-enabled/dir.conf
+    else
+        echo "dir.conf is already enabled."
+    fi
+
+    # Update DirectoryIndex directive
     sudo sed -i 's/DirectoryIndex index.html index.cgi index.pl index.php index.xhtml index.htm/DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm/' /etc/apache2/mods-enabled/dir.conf
 }
 
