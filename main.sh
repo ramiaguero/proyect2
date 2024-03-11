@@ -66,50 +66,89 @@ php -v
 # Configure Apache to support PHP extension
 echo "Configuring Apache to support PHP extension..."
 sudo sed -i 's/DirectoryIndex index.html/DirectoryIndex index.php index.html/g' /etc/apache2/mods-enabled/dir.conf
+if [ ! -f "/etc/apache2/sites-available/devops-travel.conf" ]; then
+    echo "Creating Apache configuration file for DevOps Travel application..."
+    sudo cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/devops-travel.conf
+    sudo sed -i 's/\/var\/www\/html/\/var\/www\/html\/devops-travel/g' /etc/apache2/sites-available/devops-travel.conf
+    sudo a2ensite devops-travel.conf
+fi
 sudo systemctl reload apache2
 
 echo "Stage 1 (init) completed successfully."
 
-# Step 1: Clone or pull the application repository
-APP_REPO_URL="https://github.com/ramiaguero/proyect2.git"
-APP_FOLDER="/var/www/html/devops-travel"
+# Define the repository URL
+REPO_URL="https://github.com/ramiaguero/proyect2/tree/master/app-295devops-travel"
 
-if [ ! -d "$APP_FOLDER" ]; then
-    echo "Cloning application repository..."
-    git clone "$APP_REPO_URL" "$APP_FOLDER"
-else
-    echo "Pulling latest changes from application repository..."
-    cd "$APP_FOLDER"
+# Define the destination directory
+DEST_DIR="/var/www/html/"
+
+# Clone or pull the repository
+if [ -d "$DEST_DIR" ]; then
+    echo "Destination directory already exists."
+    echo "Pulling latest changes from the repository..."
+    cd "$DEST_DIR"
     git pull origin master
+else
+    echo "Destination directory does not exist."
+    echo "Cloning the repository..."
+    git clone "$REPO_URL" "$DEST_DIR"
 fi
 
-# Step 2: Move to the Apache configuration directory
-APACHE_CONFIG_DIR="/etc/apache2/sites-available"
-
-# Assuming your Apache configuration file is named devops-travel.conf
-APACHE_CONFIG_FILE="$APACHE_CONFIG_DIR/devops-travel.conf"
-
-# Assuming your Apache root directory is /var/www/html
-APACHE_ROOT="/var/www/html"
-
-# Step 3: Test the existence of the application code
-if [ -d "$APP_FOLDER" ]; then
-    echo "Application code found."
+# Test if the application code exists
+if [ -d "$DEST_DIR" ]; then
+    echo "Application code is successfully deployed."
 else
-    echo "Error: Application code not found."
+    echo "Error: Application code deployment failed."
+fi
+
+# Adjust PHP config to support dynamic php files
+echo "Adjusting PHP configuration..."
+PHP_CONFIG_FILE="/etc/apache2/mods-enabled/dir.conf"
+PHP_CONFIG_LINE="DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm"
+sudo sed -i "s|^.*DirectoryIndex.*$|$PHP_CONFIG_LINE|" "$PHP_CONFIG_FILE"
+echo "PHP configuration adjusted."
+
+# Reload Apache
+echo "Reloading Apache server..."
+sudo systemctl reload apache2
+echo "Apache server reloaded."
+
+# Validate if the Apache service is running
+APACHE_STATUS=$(systemctl is-active apache2)
+if [ "$APACHE_STATUS" = "active" ]; then
+    echo "Apache service is running."
+else
+    echo "Error: Apache service is not running."
     exit 1
 fi
 
-# Step 4: Adjust PHP configuration
-echo "Adjusting PHP configuration..."
-echo "Adding index.php to DirectoryIndex directive..."
+# Reload Apache server
+echo "Reloading Apache server..."
+sudo systemctl reload apache2
+echo "Apache server reloaded."
 
-# Adjust the DirectoryIndex directive to prioritize index.php
-sed -i 's/DirectoryIndex.*/DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm/g' "$APACHE_CONFIG_FILE"
+# Access the DevOps Travel application
+echo "Accessing the DevOps Travel application..."
+curl -s -o /dev/null http://localhost && echo "Application is available for end users." || echo "Error: Application is not available for end users."
 
-# Step 5: Test compatibility
-echo "Testing PHP compatibility..."
-echo "<?php phpinfo(); ?>" > "$APACHE_ROOT/info.php"
 
-# Step 6: Access PHP informational screen
-echo "PHP info available at: http://localhost/info.php"
+# Define variables
+WEBHOOK_URL="https://discord.com/api/webhooks/1216807096176345188/jttU4wdLrdZtIklYcrfFhqHlOFMFzBUAFP72nmJ3IArm7LaPGUUfxqLqMAVK7_OKGcaP"
+
+# Get the author of the last commit
+AUTHOR=$(git log -1 --pretty=format:"%an")
+
+# Get the commit message
+COMMIT=$(git log -1 --pretty=format:"%s")
+
+# Get the repository name
+REPOSITORY=$(basename $(git rev-parse --show-toplevel))
+
+# Define the status
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
+
+# Define the message
+MESSAGE="Author: $AUTHOR | Commit: $COMMIT | Repository: $REPOSITORY | Status: $STATUS"
+
+# Send the message to Discord webhook
+curl -H "Content-Type: application/json" -d "{\"content\":\"$MESSAGE\"}" $WEBHOOK_URL
