@@ -1,131 +1,162 @@
 #!/bin/bash
 
-# Function to install required packages
-install_packages() {
-    local packages=("apache2" "php" "mariadb-server" "git" "curl")
-
-    for pkg in "${packages[@]}"; do
-        if ! dpkg -l | grep -q $pkg; then
-            sudo apt-get install -y $pkg
-        else
-            echo "$pkg is already installed."
-        fi
-    done
+# Function to check if a package is installed
+package_installed() {
+    dpkg -l "$1" &> /dev/null
 }
 
-# Function to validate installation
-validate_installation() {
-    local services=("apache2" "mysql" "php")
-    local errors=0
+# Function to install a package
+install_package() {
+    echo "Installing $1..."
+    sudo apt-get install -y "$1"
+}
 
-    for service in "${services[@]}"; do
-        if ! systemctl is-active --quiet $service; then
-            echo "Error: $service is not running."
-            ((errors++))
-        fi
-    done
+# Function to enable and start services
+enable_service() {
+    echo "Enabling and starting $1 service..."
+    sudo systemctl enable "$1"
+    sudo systemctl start "$1"
+}
 
-    if [ $errors -eq 0 ]; then
-        echo "All services are running."
+# Update package lists
+echo "Updating package lists..."
+sudo apt-get update
+
+# Install Git
+if ! package_installed git; then
+    install_package git
+else
+    echo "Git is already installed."
+fi
+
+# Install MariaDB
+if ! package_installed mariadb-server; then
+    install_package mariadb-server
+    enable_service mariadb
+else
+    echo "MariaDB is already installed."
+fi
+
+# Install Apache
+if ! package_installed apache2; then
+    install_package apache2
+    enable_service apache2
+else
+    echo "Apache is already installed."
+fi
+
+# Install PHP
+if ! package_installed php; then
+    install_package php libapache2-mod-php php-mysql php-mbstring php-zip php-gd php-json php-curl
+else
+    echo "PHP is already installed."
+fi
+
+# Install curl
+if ! package_installed curl; then
+    install_package curl
+else
+    echo "curl is already installed."
+fi
+
+# Validate PHP installation
+echo "Validating PHP installation..."
+php -v
+
+# Configure Apache to support PHP extension
+echo "Configuring Apache to support PHP extension..."
+sudo sed -i 's/DirectoryIndex index.html/DirectoryIndex index.php index.html/g' /etc/apache2/mods-enabled/dir.conf
+if [ ! -f "/etc/apache2/sites-available/devops-travel.conf" ]; then
+    echo "Creating Apache configuration file for DevOps Travel application..."
+    sudo cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/devops-travel.conf
+    sudo sed -i 's/\/var\/www\/html/\/var\/www\/html\/devops-travel/g' /etc/apache2/sites-available/devops-travel.conf
+    sudo a2ensite devops-travel.conf
+fi
+sudo systemctl reload apache2
+
+echo "Stage 1 (init) completed successfully."
+
+# Define the repository URL
+REPO_URL="https://github.com/ramiaguero/proyect2.git"
+
+# Define the destination directory
+DEST_DIR="/var/www/html/"
+
+# Clone or pull the repository
+if [ -d "$DEST_DIR" ]; then
+    echo "Destination directory already exists."
+    echo "Pulling latest changes from the repository..."
+    cd "$DEST_DIR"
+    if [ -d ".git" ]; then
+        git pull origin master
     else
-        echo "There are errors. Please check the services."
+        echo "Error: Not a Git repository or Git repository not found."
     fi
-}
+else
+    echo "Destination directory does not exist."
+    echo "Cloning the repository..."
+    git clone "$REPO_URL" "$DEST_DIR"
+fi
 
-# Function to clone or pull repository
-clone_or_pull_repository() {
-    local repo_url="https://github.com/ramiaguero/proyect2"
-    local repo_dir="/var/www/html/devops-travel"
-    
-    if [ -d "$repo_dir/.git" ]; then
-        echo "Repository exists. Pulling latest changes..."
-        cd $repo_dir || exit
-        git pull origin main
-    else
-        echo "Cloning repository..."
-        sudo git clone $repo_url $repo_dir
-    fi
-}
+# Test if the application code exists
+if [ -d "$DEST_DIR" ]; then
+    echo "Application code is successfully deployed."
+else
+    echo "Error: Application code deployment failed."
+fi
 
-# Function to move application code
-move_application_code() {
-    local repo_dir="/var/www/html/devops-travel"
+# Adjust PHP config to support dynamic php files
+echo "Adjusting PHP configuration..."
+PHP_CONFIG_FILE="/etc/apache2/mods-enabled/dir.conf"
+PHP_CONFIG_LINE="DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm"
+sudo sed -i "s|^.*DirectoryIndex.*\$|$PHP_CONFIG_LINE|" "$PHP_CONFIG_FILE"
+echo "PHP configuration adjusted."
 
-    if [ -d "$repo_dir" ]; then
-        echo "Moving application code to Apache directory..."
-        sudo cp -r $repo_dir/* /var/www/html
-    else
-        echo "Error: Repository directory not found."
-    fi
-}
+# Reload Apache
+echo "Reloading Apache server..."
+sudo systemctl reload apache2
+echo "Apache server reloaded."
 
-# Function to adjust PHP configuration
-adjust_php_configuration() {
-    echo "Adjusting PHP configuration..."
+# Validate if the Apache service is running
+APACHE_STATUS=$(systemctl is-active apache2)
+if [ "$APACHE_STATUS" = "active" ]; then
+    echo "Apache service is running."
+else
+    echo "Error: Apache service is not running."
+    exit 1
+fi
 
-    # Check if dir.conf is properly enabled
-    if [ ! -e /etc/apache2/mods-enabled/dir.conf ]; then
-        echo "Enabling dir.conf..."
-        sudo ln -s /etc/apache2/mods-available/dir.conf /etc/apache2/mods-enabled/dir.conf
-    else
-        echo "dir.conf is already enabled."
-    fi
+# Reload Apache server
+echo "Reloading Apache server..."
+sudo systemctl reload apache2
+echo "Apache server reloaded."
 
-    # Update DirectoryIndex directive
-    sudo sed -i 's/DirectoryIndex index.html index.cgi index.pl index.php index.xhtml index.htm/DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm/' /etc/apache2/mods-enabled/dir.conf
-}
+# Access the DevOps Travel application
+echo "Accessing the DevOps Travel application..."
+curl -s -o /dev/null http://localhost && echo "Application is available for end users." || echo "Error: Application is not available for end users."
 
-# Function to reload Apache server
-reload_apache_server() {
-    echo "Reloading Apache server..."
-    sudo systemctl reload apache2
-}
 
-# Function to test application
-test_application() {
-    echo "Testing application..."
-    if curl -s http://localhost/info.php | grep -q "PHP Version"; then
-        echo "Application test successful."
-    else
-        echo "Error: Application test failed."
-    fi
-}
+# Define variables
+WEBHOOK_URL="https://discord.com/api/webhooks/1216807096176345188/jttU4wdLrdZtIklYcrfFhqHlOFMFzBUAFP72nmJ3IArm7LaPGUUfxqLqMAVK7_OKGcaP"
 
-# Function to send notification to Discord
-send_discord_notification() {
-    local webhook_url="$1"
-    local author="$2"
-    local commit_description="$3"
-    local group="$4"
-    local status="$5"
-    
-    local message="Commit by: $author\nDescription: $commit_description\nGroup: $group\nStatus: $status"
-    
-    echo "Sending Discord notification..."
-    curl -X POST -H "Content-Type: application/json" -d "{\"content\":\"$message\"}" "$webhook_url" >/dev/null 2>&1
-    echo "Discord notification sent."
-}
+# Get the author of the last commit
+AUTHOR=$(git log -1 --pretty=format:"%an" 2>/dev/null)
 
-# Main function
-main() {
-    install_packages
-    validate_installation
-    clone_or_pull_repository
-    move_application_code
-    adjust_php_configuration
-    reload_apache_server
-    test_application
+# Get the commit message
+COMMIT=$(git log -1 --pretty=format:"%s" 2>/dev/null)
 
-    # Discord webhook details
-    webhook_url="https://discord.com/api/webhooks/1216807096176345188/jttU4wdLrdZtIklYcrfFhqHlOFMFzBUAFP72nmJ3IArm7LaPGUUfxqLqMAVK7_OKGcaP"
-    author="ramiaguero"
-    commit_description="testing proyect"
-    group="default"
-    status="Deployment successful"
+# Get the repository name
+REPOSITORY=$(basename $(git rev-parse --show-toplevel 2>/dev/null) 2>/dev/null)
 
-    # Send Discord notification
-    send_discord_notification "$webhook_url" "$author" "$commit_description" "$group" "$status"
-}
+if [ -z "$REPOSITORY" ]; then
+    REPOSITORY="Unknown"
+fi
 
-# Execute main function
-main
+# Define the status
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
+
+# Define the message
+MESSAGE="Author: $AUTHOR | Commit: $COMMIT | Repository: $REPOSITORY | Status: $STATUS"
+
+# Send the message to Discord webhook
+curl -H "Content-Type: application/json" -d "{\"content\":\"$MESSAGE\"}" $WEBHOOK_URL
