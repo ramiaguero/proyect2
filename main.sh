@@ -69,3 +69,47 @@ sudo sed -i 's/DirectoryIndex index.html/DirectoryIndex index.php index.html/g' 
 sudo systemctl reload apache2
 
 echo "Stage 1 (init) completed successfully."
+
+# Step 1: Clone or pull the application repository
+APP_REPO_URL="https://github.com/ramiaguero/proyect2.git"
+APP_FOLDER="/var/www/html/devops-travel"
+
+if [ ! -d "$APP_FOLDER" ]; then
+    echo "Cloning application repository..."
+    git clone "$APP_REPO_URL" "$APP_FOLDER"
+else
+    echo "Pulling latest changes from application repository..."
+    cd "$APP_FOLDER"
+    git pull origin master
+fi
+
+# Step 2: Move to the Apache configuration directory
+APACHE_CONFIG_DIR="/etc/apache2/sites-available"
+
+# Assuming your Apache configuration file is named devops-travel.conf
+APACHE_CONFIG_FILE="$APACHE_CONFIG_DIR/devops-travel.conf"
+
+# Assuming your Apache root directory is /var/www/html
+APACHE_ROOT="/var/www/html"
+
+# Step 3: Test the existence of the application code
+if [ -d "$APP_FOLDER" ]; then
+    echo "Application code found."
+else
+    echo "Error: Application code not found."
+    exit 1
+fi
+
+# Step 4: Adjust PHP configuration
+echo "Adjusting PHP configuration..."
+echo "Adding index.php to DirectoryIndex directive..."
+
+# Adjust the DirectoryIndex directive to prioritize index.php
+sed -i 's/DirectoryIndex.*/DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm/g' "$APACHE_CONFIG_FILE"
+
+# Step 5: Test compatibility
+echo "Testing PHP compatibility..."
+echo "<?php phpinfo(); ?>" > "$APACHE_ROOT/info.php"
+
+# Step 6: Access PHP informational screen
+echo "PHP info available at: http://localhost/info.php"
