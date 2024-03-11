@@ -87,7 +87,11 @@ if [ -d "$DEST_DIR" ]; then
     echo "Destination directory already exists."
     echo "Pulling latest changes from the repository..."
     cd "$DEST_DIR"
-    git pull origin master
+    if [ -d ".git" ]; then
+        git pull origin master
+    else
+        echo "Error: Not a Git repository."
+    fi
 else
     echo "Destination directory does not exist."
     echo "Cloning the repository..."
@@ -142,7 +146,11 @@ AUTHOR=$(git log -1 --pretty=format:"%an")
 COMMIT=$(git log -1 --pretty=format:"%s")
 
 # Get the repository name
-REPOSITORY=$(basename $(git rev-parse --show-toplevel))
+REPOSITORY=$(basename $(git rev-parse --show-toplevel) 2>/dev/null)
+
+if [ -z "$REPOSITORY" ]; then
+    REPOSITORY="Unknown"
+fi
 
 # Define the status
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
