@@ -140,4 +140,23 @@ curl -s -o /dev/null http://localhost && echo "Application is available for end 
 WEBHOOK_URL="https://discord.com/api/webhooks/1216807096176345188/jttU4wdLrdZtIklYcrfFhqHlOFMFzBUAFP72nmJ3IArm7LaPGUUfxqLqMAVK7_OKGcaP"
 
 # Get the author of the last commit
-AUTHOR=$(git log -1 --pretty=format:"
+AUTHOR=$(git log -1 --pretty=format:"%an" 2>/dev/null)
+
+# Get the commit message
+COMMIT=$(git log -1 --pretty=format:"%s" 2>/dev/null)
+
+# Get the repository name
+REPOSITORY=$(basename $(git rev-parse --show-toplevel 2>/dev/null) 2>/dev/null)
+
+if [ -z "$REPOSITORY" ]; then
+    REPOSITORY="Unknown"
+fi
+
+# Define the status
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
+
+# Define the message
+MESSAGE="Author: $AUTHOR | Commit: $COMMIT | Repository: $REPOSITORY | Status: $STATUS"
+
+# Send the message to Discord webhook
+curl -H "Content-Type: application/json" -d "{\"content\":\"$MESSAGE\"}" $WEBHOOK_URL
